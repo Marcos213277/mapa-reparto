@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Control de Cobertura - La Habana</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
@@ -202,12 +202,84 @@
         #sync-indicator.sync .dot-sync { background:#f39c12; animation:pulso 1s infinite; }
         #sync-indicator.err  .dot-sync { background:#e74c3c; }
 
-        /* ── Banner solo-lectura (para usuarios no admin) ── */
+        /* ── Banner solo-lectura ── */
         #banner-readonly {
             display:none; position:absolute; top:80px; left:50%; transform:translateX(-50%);
             z-index:1000; background:#fef9e7; border:1px solid #f1c40f;
             border-radius:10px; padding:7px 16px; font-size:12px; color:#7d6608;
             box-shadow:0 2px 8px rgba(0,0,0,0.1); white-space:nowrap;
+        }
+
+        /* ── Buscador con sugerencias ── */
+        .search-input-wrap { position:relative; flex:1; min-width:0; }
+        .search-input-wrap input { width:100%; padding:10px 15px; border:1px solid #e0e0e0; border-radius:20px; outline:none; font-size:14px; }
+        #search-sugerencias {
+            display:none; position:absolute; top:calc(100% + 4px); left:0; right:0;
+            background:white; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.18);
+            list-style:none; z-index:2000; overflow:hidden; max-height:220px; overflow-y:auto;
+        }
+        #search-sugerencias li {
+            padding:10px 14px; font-size:13px; cursor:pointer; border-bottom:1px solid #f0f0f0;
+            display:flex; flex-direction:column; gap:2px;
+        }
+        #search-sugerencias li:last-child { border-bottom:none; }
+        #search-sugerencias li:hover { background:#f4f8ff; }
+        #search-sugerencias li .sug-principal { font-weight:600; color:#2c3e50; }
+        #search-sugerencias li .sug-secundario { font-size:11px; color:#95a5a6; }
+        #search-sugerencias li.sug-loading { color:#95a5a6; font-style:italic; cursor:default; }
+        #search-sugerencias li.sug-nada { color:#e74c3c; cursor:default; }
+
+        /* ══════════════════════════════════
+           RESPONSIVE — MÓVIL
+        ══════════════════════════════════ */
+        @media (max-width: 600px) {
+            /* Top bar ocupa todo el ancho, fija arriba */
+            .top-bar {
+                top:8px; width:calc(100% - 16px); max-width:none;
+                left:8px; right:8px; transform:none;
+            }
+            .search-container {
+                padding:6px 10px; gap:5px; border-radius:16px; flex-wrap:wrap;
+            }
+            .search-container .btn-main {
+                padding:9px 12px; font-size:12px;
+            }
+            /* Badge de usuario: más compacto */
+            #badge-usuario { font-size:11px; padding:4px 10px; }
+
+            /* Banner readonly: debajo del top bar */
+            #banner-readonly { top:auto; bottom:100px; white-space:normal; text-align:center; width:90%; }
+
+            /* Botón GPS: mueve debajo de la barra */
+            .gps-button { top:auto; bottom:110px; left:10px; width:42px; height:42px; font-size:20px; }
+
+            /* Panel ruta: desliza desde abajo como sheet */
+            #panel-ruta {
+                right:0; left:0; top:auto; bottom:0; width:100%;
+                border-radius:20px 20px 0 0;
+                max-height:65vh; overflow-y:auto;
+                padding:18px 16px 24px;
+            }
+            /* Lista paradas: más altura en móvil */
+            #lista-paradas { max-height:28vh; }
+
+            /* HUD y fin: padding lateral seguro */
+            #hud-navegacion { padding:14px 16px 28px; }
+            #hud-fin        { padding:18px 16px 28px; }
+            #hud-navegacion .hud-nombre { font-size:16px; }
+
+            /* Sync indicator: se aleja del borde inferior del HUD */
+            #sync-indicator { bottom:auto; top:auto; display:none; }
+
+            /* Popup más ancho en móvil */
+            .popup-form { min-width:220px; }
+        }
+
+        /* iPhone con notch / Dynamic Island — safe area */
+        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+            #hud-navegacion { padding-bottom:calc(14px + env(safe-area-inset-bottom)); }
+            #hud-fin        { padding-bottom:calc(18px + env(safe-area-inset-bottom)); }
+            #panel-ruta     { padding-bottom:calc(20px + env(safe-area-inset-bottom)); }
         }
     </style>
 </head>
@@ -229,10 +301,13 @@
 <!-- ══════════════════════ APP ══════════════════════ -->
 <div class="top-bar">
     <div class="search-container">
-        <input type="text" id="address-input" placeholder="Ej: Calle 23 y L, Vedado">
+        <div class="search-input-wrap">
+            <input type="text" id="address-input" placeholder="Ej: Calle 23, Vedado o 23 y L" autocomplete="off">
+            <ul id="search-sugerencias"></ul>
+        </div>
         <button class="btn-main" onclick="buscarDireccion()">Buscar</button>
-        <button class="btn-main btn-excel" id="btn-export" onclick="exportarAExcel()">Exportar CSV</button>
-        <button class="btn-main btn-ruta" id="btn-modo-ruta" onclick="toggleModoRuta()">🗺 Trazar Ruta</button>
+        <button class="btn-main btn-excel" id="btn-export" onclick="exportarAExcel()">CSV</button>
+        <button class="btn-main btn-ruta" id="btn-modo-ruta" onclick="toggleModoRuta()">🗺 Ruta</button>
         <button class="btn-main btn-logout" onclick="cerrarSesion()" title="Cerrar sesión">⏻</button>
     </div>
     <div id="badge-usuario">
@@ -286,10 +361,12 @@
 // ══════════════════════════════════════════
 const map = L.map('map', { zoomControl:true }).setView([23.1136, -82.3666], 13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution:'©️ OpenStreetMap contributors'
+    attribution:'© OpenStreetMap contributors'
 }).addTo(map);
 
 document.getElementById('address-input').addEventListener('keypress', e => { if (e.key==='Enter') buscarDireccion(); });
+document.getElementById('address-input').addEventListener('input', onSearchInput);
+document.getElementById('address-input').addEventListener('blur',  () => setTimeout(ocultarSugerencias, 200));
 document.getElementById('login-pass').addEventListener('keypress',   e => { if (e.key==='Enter') hacerLogin(); });
 
 // ══════════════════════════════════════════
@@ -368,7 +445,9 @@ function onUsuarioLogueado(user) {
         if (esAdmin) {
             map.on('click', function(e) {
                 if (modoRutaActivo) return;
-                agregarZonaVenta(e.latlng.lat, e.latlng.lng, "Punto Manual");
+                // Clic en otro lugar del mapa mientras hay provisional → cancela el anterior
+                // agregarZonaVenta crea el nuevo y cancela el anterior internamente
+                agregarZonaVenta(e.latlng.lat, e.latlng.lng, "Nuevo Punto", 300, "activo", null, false, true);
             });
         }
 
@@ -548,15 +627,41 @@ function actualizarPanel(rutaParaMostrar) {
 // ══════════════════════════════════════════
 async function optimizarYDibujarRuta() {
     if (paradasSeleccionadas.length<1) { setMsg('⚠ Selecciona al menos 1 parada.','error'); return; }
-    setMsg('⏳ Calculando ruta por carreteras...','');
+    setMsg('⏳ Obteniendo tu ubicación actual...','');
     document.querySelector('.btn-optimizar').disabled=true;
     capasRuta.forEach(c=>map.removeLayer(c)); capasRuta=[]; numMarcadores=[];
 
+    // Obtener posición GPS fresca en el momento de calcular
+    const posAhora = await new Promise(resolve => {
+        if (!navigator.geolocation) { resolve(null); return; }
+        navigator.geolocation.getCurrentPosition(
+            pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            ()  => resolve(null),
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+        );
+    });
+
+    if (posAhora) {
+        posicionActual = posAhora;
+        if (marcadorPosActual) map.removeLayer(marcadorPosActual);
+        const icon = L.divIcon({html:'<div class="icono-inicio-ruta">📍</div>',className:'',iconAnchor:[15,15]});
+        marcadorPosActual = L.marker([posAhora.lat,posAhora.lng],{icon,zIndexOffset:1000})
+            .addTo(map).bindPopup('<b>📍 Tu posición</b><br>Punto de inicio.');
+        document.getElementById('badge-origen').style.display='flex';
+        document.getElementById('texto-origen').textContent='Inicio: tu posición actual';
+    } else if (!posicionActual) {
+        document.getElementById('badge-origen').style.display='none';
+    }
+
+    setMsg('⏳ Calculando ruta por carreteras...','');
+
+    const origenCalculo = posAhora || posicionActual;
     let rutaOptima, puntoInicio;
-    if (posicionActual) {
-        rutaOptima=optimizarRutaDesdeOrigen(posicionActual,[...paradasSeleccionadas]);
-        puntoInicio=posicionActual;
+    if (origenCalculo) {
+        rutaOptima  = optimizarRutaDesdeOrigen(origenCalculo,[...paradasSeleccionadas]);
+        puntoInicio = origenCalculo;
     } else {
+        setMsg('⚠ Sin GPS — calculando entre paradas.','error');
         const resto=paradasSeleccionadas.slice(1);
         rutaOptima=paradasSeleccionadas.length>1
             ?[paradasSeleccionadas[0],...optimizarRutaDesdeOrigen(paradasSeleccionadas[0],resto)]
@@ -746,21 +851,44 @@ function limpiarRuta() {
 // ══════════════════════════════════════════
 //  AGREGAR ZONA EN EL MAPA
 // ══════════════════════════════════════════
-function agregarZonaVenta(lat, lng, infoDireccion="Nuevo Punto", radioInicial=300, estadoInicial="activo", idForzado=null, sinGuardar=false) {
+
+// Punto provisional pendiente de confirmación (solo admin, puntos nuevos manuales)
+let _puntoProvisional = null;
+
+function cancelarPuntoProvisional() {
+    if (!_puntoProvisional) return;
+    map.removeLayer(_puntoProvisional.marcador);
+    map.removeLayer(_puntoProvisional.circulo);
+    _puntoProvisional = null;
+}
+
+// nuevoManual=true  → modo provisional con botón Aceptar (clic en mapa)
+// nuevoManual=false → punto ya confirmado que viene de Firebase o buscador
+function agregarZonaVenta(lat, lng, infoDireccion="Nuevo Punto", radioInicial=300, estadoInicial="activo", idForzado=null, sinGuardar=false, nuevoManual=false) {
+
+    // Si hay un provisional anterior sin confirmar, lo eliminamos
+    if (nuevoManual) cancelarPuntoProvisional();
+
     const idZona = idForzado ? String(idForzado) : (Date.now()+Math.random().toString(36).substr(2,5));
     const marcador = L.marker([lat,lng]).addTo(map);
     const cfg = coloresEstado[estadoInicial]||coloresEstado['activo'];
     const circulo = L.circle([lat,lng],{color:cfg.color,fillColor:cfg.fillColor,fillOpacity:0.35,radius:radioInicial}).addTo(map);
-    const datosZona = {id:idZona,nombre:infoDireccion,latitud:lat,longitud:lng,radio:radioInicial,estado:estadoInicial,marcador,circulo,_seleccionadoRuta:false};
-    listadoZonas.push(datosZona);
-    if(!sinGuardar) guardarZonaFirebase(datosZona);
 
-    // Clic en modo ruta (cualquier usuario)
+    // Si es nuevo manual, guardar referencia provisional y NO añadir a listadoZonas aún
+    if (nuevoManual) {
+        _puntoProvisional = { marcador, circulo, idZona };
+    } else {
+        const datosZona = {id:idZona,nombre:infoDireccion,latitud:lat,longitud:lng,radio:radioInicial,estado:estadoInicial,marcador,circulo,_seleccionadoRuta:false};
+        listadoZonas.push(datosZona);
+        if (!sinGuardar) guardarZonaFirebase(datosZona);
+    }
+
+    // Clic en modo ruta (cualquier usuario, solo puntos ya confirmados)
     marcador.on('click', function(e) {
-        if(!modoRutaActivo) return;
+        if (!modoRutaActivo || nuevoManual) return;
         L.DomEvent.stopPropagation(e);
         const zona=listadoZonas.find(z=>z.id===idZona); if(!zona) return;
-        if(!zona._seleccionadoRuta){
+        if (!zona._seleccionadoRuta) {
             zona._seleccionadoRuta=true;
             zona.marcador.setIcon(L.divIcon({html:`<div style="background:#e67e22;width:26px;height:26px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);"></div>`,className:'',iconAnchor:[13,13]}));
             paradasSeleccionadas.push({idZona,nombre:zona.nombre,lat:zona.latitud,lng:zona.longitud});
@@ -772,17 +900,79 @@ function agregarZonaVenta(lat, lng, infoDireccion="Nuevo Punto", radioInicial=30
         actualizarPanel();
     });
 
-    // Popup edición — solo admin puede usar los botones
+    // ── Popup ──
     const formulario=document.createElement('div');
     formulario.className='popup-form';
+
+    if (nuevoManual) {
+        // Popup de creación: campos editables + botón Aceptar + botón Cancelar
+        formulario.innerHTML=`
+            <h4>📍 Nuevo Punto</h4>
+            <div class="popup-group"><label>Nombre:</label><input type="text" class="input-nombre" value="${infoDireccion}" placeholder="Nombre del punto"></div>
+            <div class="popup-group"><label>Radio (metros):</label><input type="number" class="input-radio" value="${radioInicial}" min="10" max="5000"></div>
+            <div class="popup-group"><label>Estado:</label>
+                <select class="select-estado">
+                    <option value="activo">🔴 Activo</option>
+                    <option value="negociacion">🟡 En Negociación</option>
+                </select>
+            </div>
+            <div class="popup-buttons">
+                <button class="btn-action btn-accept" style="background:#3498db;">✔ Aceptar</button>
+                <button class="btn-action btn-cancel" style="background:#95a5a6;">✖ Cancelar</button>
+            </div>`;
+
+        formulario.querySelector('.btn-accept').addEventListener('click', function() {
+            const nn = formulario.querySelector('.input-nombre').value.trim() || "Nuevo Punto";
+            const nr = parseInt(formulario.querySelector('.input-radio').value) || 300;
+            const ne = formulario.querySelector('.select-estado').value;
+            // Actualizar círculo con los valores elegidos
+            circulo.setRadius(nr);
+            const nc=coloresEstado[ne]; circulo.setStyle({color:nc.color,fillColor:nc.fillColor});
+            // Confirmar: añadir a listado y guardar
+            const datosZona={id:idZona,nombre:nn,latitud:lat,longitud:lng,radio:nr,estado:ne,marcador,circulo,_seleccionadoRuta:false};
+            listadoZonas.push(datosZona);
+            guardarZonaFirebase(datosZona);
+            _puntoProvisional = null;
+            // Reasignar el popup al de edición normal
+            marcador.unbindPopup();
+            _bindPopupEdicion(marcador, circulo, idZona, nn, nr, ne);
+            marcador.closePopup();
+        });
+
+        formulario.querySelector('.btn-cancel').addEventListener('click', function() {
+            marcador.closePopup();
+            cancelarPuntoProvisional();
+        });
+
+    } else {
+        // Popup de edición (punto ya existente)
+        _buildPopupEdicion(formulario, marcador, circulo, idZona, infoDireccion, radioInicial, estadoInicial);
+    }
+
+    marcador.bindPopup(formulario, {autoPan:true, closeOnClick:false});
+    marcador.on('popupopen',  function() { if (modoRutaActivo && !nuevoManual) marcador.closePopup(); });
+
+    // Si se cierra el popup de un punto provisional SIN aceptar → eliminar
+    if (nuevoManual) {
+        marcador.on('popupclose', function() {
+            // Pequeño delay para que el btn-accept tenga tiempo de limpiar _puntoProvisional
+            setTimeout(() => { if (_puntoProvisional && _puntoProvisional.idZona === idZona) cancelarPuntoProvisional(); }, 150);
+        });
+    }
+
+    marcador.openPopup();
+}
+
+// Construye el contenido del popup de edición para puntos ya existentes
+function _buildPopupEdicion(formulario, marcador, circulo, idZona, nombre, radio, estado) {
     formulario.innerHTML=`
         <h4>${esAdmin?'✏️ Editar Zona':'📍 Info del Punto'}</h4>
-        <div class="popup-group"><label>Nombre:</label><input type="text" class="input-nombre" value="${infoDireccion}" ${esAdmin?'':'readonly'}></div>
-        <div class="popup-group"><label>Radio (metros):</label><input type="number" class="input-radio" value="${radioInicial}" min="10" max="5000" ${esAdmin?'':'readonly'}></div>
+        <div class="popup-group"><label>Nombre:</label><input type="text" class="input-nombre" value="${nombre}" ${esAdmin?'':'readonly'}></div>
+        <div class="popup-group"><label>Radio (metros):</label><input type="number" class="input-radio" value="${radio}" min="10" max="5000" ${esAdmin?'':'readonly'}></div>
         <div class="popup-group"><label>Estado:</label>
             <select class="select-estado" ${esAdmin?'':'disabled'}>
-                <option value="activo"      ${estadoInicial==='activo'?'selected':''}>🔴 Activo</option>
-                <option value="negociacion" ${estadoInicial==='negociacion'?'selected':''}>🟡 En Negociación</option>
+                <option value="activo"      ${estado==='activo'?'selected':''}>🔴 Activo</option>
+                <option value="negociacion" ${estado==='negociacion'?'selected':''}>🟡 En Negociación</option>
             </select>
         </div>
         ${esAdmin?`<div class="popup-buttons">
@@ -790,7 +980,7 @@ function agregarZonaVenta(lat, lng, infoDireccion="Nuevo Punto", radioInicial=30
             <button class="btn-action btn-delete">Borrar</button>
         </div>`:''}`;
 
-    if(esAdmin){
+    if (esAdmin) {
         formulario.querySelector('.btn-update').addEventListener('click',function(){
             const nn=formulario.querySelector('.input-nombre').value||"Punto de Venta";
             const nr=parseInt(formulario.querySelector('.input-radio').value)||300;
@@ -810,46 +1000,197 @@ function agregarZonaVenta(lat, lng, infoDireccion="Nuevo Punto", radioInicial=30
             eliminarZonaFirebase(idZona); actualizarPanel();
         });
     }
+}
 
-    marcador.bindPopup(formulario,{autoPan:true});
-    marcador.on('popupopen',function(){ if(modoRutaActivo) marcador.closePopup(); });
-    if(!sinGuardar) marcador.openPopup();
+// Reasigna popup de edición a un marcador ya confirmado
+function _bindPopupEdicion(marcador, circulo, idZona, nombre, radio, estado) {
+    const f=document.createElement('div'); f.className='popup-form';
+    _buildPopupEdicion(f, marcador, circulo, idZona, nombre, radio, estado);
+    marcador.bindPopup(f, {autoPan:true, closeOnClick:false});
+    marcador.on('popupopen', function() { if (modoRutaActivo) marcador.closePopup(); });
 }
 
 // ══════════════════════════════════════════
-//  BUSCADOR (solo admin puede agregar)
+//  BUSCADOR INTELIGENTE
 // ══════════════════════════════════════════
-function buscarDireccion() {
-    const query=document.getElementById('address-input').value.trim();
-    if(!query) return;
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=cu&state=La+Habana&limit=3`,{headers:{'Accept-Language':'es'}})
-        .then(r=>r.json())
-        .then(data=>{
-            if(data&&data.length>0){
-                const res=data[0],lat=parseFloat(res.lat),lon=parseFloat(res.lon);
-                const comp=res.display_name.split(',');
-                map.setView([lat,lon],16);
-                if(esAdmin) agregarZonaVenta(lat,lon,comp[0]+(comp[1]?', '+comp[1].trim():''));
-                else { map.setView([lat,lon],16); }
-            } else alert("No se encontró la dirección.");
-        }).catch(()=>alert("Error de conexión con el servidor de mapas."));
+let _buscarTimer = null;
+let _buscarAbort = null;
+
+// Normaliza texto para comparación flexible
+function normalizar(s) {
+    return s.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g,"")  // quita tildes
+        .replace(/[^a-z0-9\s]/g,"")
+        .replace(/\s+/g," ").trim();
+}
+
+// Construye varias consultas alternativas para un query dado
+function generarConsultas(query) {
+    const q = query.trim();
+    const base = `${q}, La Habana, Cuba`;
+    const variantes = new Set();
+    variantes.add(base);
+
+    // "Calle 23 y L" → "Calle 23, L, Vedado"
+    const yMatch = q.match(/^(.+?)\s+[yY&]\s+(.+)$/);
+    if (yMatch) {
+        variantes.add(`${yMatch[1].trim()}, ${yMatch[2].trim()}, La Habana, Cuba`);
+        variantes.add(`${yMatch[1].trim()} esquina ${yMatch[2].trim()}, La Habana, Cuba`);
+    }
+
+    // Si no dice "calle" explícito, agregar prefijo
+    if (!/^(calle|avenida|av|calzada|paseo|boulevard)/i.test(q)) {
+        variantes.add(`Calle ${q}, La Habana, Cuba`);
+    }
+
+    // Sin restricción de país por si Nominatim no la conoce
+    variantes.add(`${q}, Habana Cuba`);
+    variantes.add(q);
+
+    return [...variantes];
+}
+
+async function buscarEnNominatim(consulta) {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(consulta)}`;
+    const ctrl = new AbortController();
+    _buscarAbort = ctrl;
+    const res  = await fetch(url, { headers:{'Accept-Language':'es'}, signal:ctrl.signal });
+    const data = await res.json();
+    return data || [];
+}
+
+function formatearResultado(item) {
+    const a   = item.address || {};
+    const partes = [];
+    // línea principal: lo más específico
+    if (a.road)        partes.push(a.road);
+    else if (a.amenity) partes.push(a.amenity);
+    else               partes.push(item.display_name.split(",")[0]);
+    // línea secundaria: municipio / barrio
+    const sub = [a.suburb||a.neighbourhood||a.quarter, a.city_district||a.county]
+                .filter(Boolean).join(", ");
+    return { principal: partes.join(", "), secundario: sub || item.display_name.split(",").slice(1,3).join(",").trim() };
+}
+
+function mostrarSugerencias(resultados) {
+    const ul = document.getElementById("search-sugerencias");
+    ul.innerHTML = "";
+    if (!resultados.length) {
+        ul.innerHTML = '<li class="sug-nada">No se encontró la dirección</li>';
+        ul.style.display = "block";
+        return;
+    }
+    resultados.forEach(item => {
+        const { principal, secundario } = formatearResultado(item);
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="sug-principal">${principal}</span><span class="sug-secundario">${secundario}</span>`;
+        li.addEventListener("mousedown", (e) => {   // mousedown para que no pierda foco antes del click
+            e.preventDefault();
+            seleccionarResultado(item, principal);
+        });
+        ul.appendChild(li);
+    });
+    ul.style.display = "block";
+}
+
+function ocultarSugerencias() {
+    document.getElementById("search-sugerencias").style.display = "none";
+}
+
+function seleccionarResultado(item, nombre) {
+    const lat = parseFloat(item.lat), lng = parseFloat(item.lon);
+    document.getElementById("address-input").value = nombre;
+    ocultarSugerencias();
+    map.setView([lat, lng], 17);
+    if (esAdmin) agregarZonaVenta(lat, lng, nombre, 300, "activo", null, false, true);
+}
+
+async function buscarConFallback(query) {
+    const consultas = generarConsultas(query);
+    for (const c of consultas) {
+        try {
+            const resultados = await buscarEnNominatim(c);
+            if (resultados.length) return resultados;
+        } catch(e) {
+            if (e.name === "AbortError") return [];
+        }
+    }
+    return [];
+}
+
+// Búsqueda al escribir (debounce 400ms)
+function onSearchInput() {
+    const q = document.getElementById("address-input").value.trim();
+    clearTimeout(_buscarTimer);
+    if (_buscarAbort) { try { _buscarAbort.abort(); } catch(e){} }
+    if (q.length < 3) { ocultarSugerencias(); return; }
+    // Mostrar "Buscando..."
+    const ul = document.getElementById("search-sugerencias");
+    ul.innerHTML = '<li class="sug-loading">Buscando...</li>';
+    ul.style.display = "block";
+    _buscarTimer = setTimeout(async () => {
+        const resultados = await buscarConFallback(q);
+        mostrarSugerencias(resultados);
+    }, 400);
+}
+
+// Búsqueda al pulsar el botón o Enter
+async function buscarDireccion() {
+    const q = document.getElementById("address-input").value.trim();
+    if (!q) return;
+    const ul = document.getElementById("search-sugerencias");
+    ul.innerHTML = '<li class="sug-loading">Buscando...</li>';
+    ul.style.display = "block";
+    const resultados = await buscarConFallback(q);
+    if (resultados.length === 1) {
+        // Si hay un único resultado, seleccionarlo directamente
+        const { principal } = formatearResultado(resultados[0]);
+        seleccionarResultado(resultados[0], principal);
+    } else {
+        mostrarSugerencias(resultados);
+    }
 }
 
 // ══════════════════════════════════════════
-//  GPS
+//  GPS — ROBUSTO PARA MÓVILES
 // ══════════════════════════════════════════
 function obtenerUbicacionActual() {
-    if(!navigator.geolocation){alert("Tu navegador no soporta geolocalización.");return;}
-    navigator.geolocation.getCurrentPosition(
-        pos=>{
-            const lat=pos.coords.latitude,lng=pos.coords.longitude;
-            map.setView([lat,lng],17);
-            if(marcadorGpsTemporal) map.removeLayer(marcadorGpsTemporal);
-            marcadorGpsTemporal=L.marker([lat,lng]).addTo(map).bindPopup("<b>📍 Estás aquí</b>").openPopup();
-        },
-        ()=>alert("No se pudo obtener tu ubicación."),
-        {enableHighAccuracy:true,timeout:10000}
-    );
+    if (!navigator.geolocation) {
+        alert("Tu navegador no soporta geolocalización.");
+        return;
+    }
+
+    // En iOS Safari la primera llamada necesita que venga de un gesto del usuario ✓
+    // Intentamos primero con alta precisión; si falla, reintentamos con baja precisión
+    function onSuccess(pos) {
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        map.setView([lat, lng], 17);
+        if (marcadorGpsTemporal) map.removeLayer(marcadorGpsTemporal);
+        marcadorGpsTemporal = L.marker([lat, lng]).addTo(map)
+            .bindPopup("<b>📍 Estás aquí</b>").openPopup();
+    }
+
+    function onError(err) {
+        // Si falla alta precisión, reintentar con baja (más rápido en móviles)
+        if (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE) {
+            navigator.geolocation.getCurrentPosition(onSuccess, onErrorFinal,
+                { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+        } else {
+            onErrorFinal(err);
+        }
+    }
+
+    function onErrorFinal(err) {
+        const msgs = {
+            1: "Permiso de ubicación denegado. Actívalo en Ajustes → Safari → Ubicación.",
+            2: "No se pudo obtener la ubicación. Verifica que el GPS esté activo.",
+            3: "Tiempo de espera agotado. Intenta en un lugar con mejor señal."
+        };
+        alert(msgs[err.code] || "Error de geolocalización.");
+    }
+
+    navigator.geolocation.getCurrentPosition(onSuccess, onError,
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 });
 }
 
 // ══════════════════════════════════════════
